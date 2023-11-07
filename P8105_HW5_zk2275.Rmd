@@ -28,7 +28,6 @@ knitr::opts_chunk$set(
                message   = FALSE,
                warning   = FALSE,
                dpi       = 150,
-               fig.width = 6, 
                fig.align = "center")
 # set theme defaults
 theme_set(
@@ -59,8 +58,10 @@ Problem 1
 Import the data set
 
 ```{r homicide_read}
+path <- "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv"
+
 homicide_df = 
-  read_csv("homicide-data.csv") %>% 
+  read_csv(path, na = c("", "Unknown"))|>
   mutate(
     city_state = str_c(city, state, sep = ", "),
     resolved = case_when(
@@ -68,12 +69,18 @@ homicide_df =
       disposition == "Open/No arrest"        ~ "unsolved",
       disposition == "Closed by arrest"      ~ "solved",
     )
-  ) %>% 
-  select(city_state, resolved) %>% 
+  ) |>
+  # remove a row that seems to have an error
   filter(city_state != "Tulsa, AL")
+  
+head(homicide_df, 10) %>% knitr::kable()
 ```
 
-Summarize the total number of unsolved cases in each of the cities.
+Upon filtering out a single row with a data entry issue, the dataset consists of `r nrow(homicide_df)` observations and 14 variables, two of which - city_state and resolution - we added for convenience. Each row of the dataset corresponds to a homicide case reported between 2007 and 2017 and includes record of the victim’s name, race/ethnicity, age, and sex.
+
+We also have data on the location of the crime down to the latitude and longitude, as well as whether the crime was ever solved. Across all observations, about 50.8% of all homicides were never solved. 
+
+We aim to understand the distribution of resolution rates across cities. To that end, we provide a table of the number of unsolved homicides and the total number of hommicides for each city.
 
 ```{r}
 aggregate_df = 
@@ -88,15 +95,63 @@ aggregate_df =
 Do a prop test for Baltimore, MD.
 
 ```{r}
-prop.test(
+# Save the output
+Baltimore_prop <- prop.test(
   aggregate_df %>% filter(city_state == "Baltimore, MD") %>% pull(hom_unsolved), 
-  aggregate_df %>% filter(city_state == "Baltimore, MD") %>% pull(hom_total)) %>% 
-  broom::tidy()
+  aggregate_df %>% filter(city_state == "Baltimore, MD") %>% pull(hom_total)) 
+
+# pull out
+broom::tidy(Baltimore_prop) %>% 
+  # extract relevant output
+  select(estimate, conf.low, conf.high)
+
 ```
 
+We find that in Baltimore between the years 2007 and 2017, the proportion of homicides that went unsolved was about 64.6%, and the 95% confidence interval around this point estimate was about [62.8%, 66.3%]. As we have obtained the desired output, we are now prepared to construct a function that can generalize this procedure.
 
+```{r}
+results_df = 
+  aggregate_df |>
+  mutate(
+    prop_tests = map2(.x = hom_unsolved, .y = hom_total, ~prop.test(x = .x, n = .y)),
+    tidy_tests = map(.x = prop_tests, ~broom::tidy(.x))
+  ) %>% 
+  # extract both the proportion of unsolved homicides and the confidence interval for each
+  select(-prop_tests) |> 
+  unnest(tidy_tests) |> 
+  select(city_state, estimate, conf.low, conf.high)
 
+results_df |> knitr::kable()
+```
 
+Using this data frame of results, we can now better visualize the distribution of proportions, sorted according to the point estimate of the proportion of unsolved homicides.
+
+```{r homicide plot}
+# create error bar chart of rate of unsolved homicide by city
+results_df %>%
+  # reorder cities according to point estimate of proportion
+  mutate(city_state = fct_reorder(city_state, estimate)) %>%
+  # instantiate plot
+  ggplot(aes(x = city_state, y = estimate)) +
+  # add point estimates
+  geom_point() +
+  # add confidence intervals
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  # flip axes for readability
+  coord_flip() +
+  # add meta-data
+  labs(
+    title = "Proportion of Unsolved Homicides, by City"
+    , x = "Proportion"
+    , y = ""
+    , caption  = paste0(
+          "Note: Confidence intervals computed at the 95% cinfidence level."
+        , "\nSource: The Washington Post."
+    )
+  )
+```
+
+Richmond, VA has the lowest rate of unsolved homicides among these 50 cities. Chicago, IL sits at the other extreme of this distribution. In fact, as its confidence interval does not overlap with that of any other city, it would appear to be an outlier in this sense.
 
 
 <!------------------------------------------------------------------------------------------
