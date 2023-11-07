@@ -56,6 +56,47 @@ Problem 1
 
 # Problem 1
 
+Import the data set
+
+```{r homicide_read}
+homicide_df = 
+  read_csv("homicide-data.csv") %>% 
+  mutate(
+    city_state = str_c(city, state, sep = ", "),
+    resolved = case_when(
+      disposition == "Closed without arrest" ~ "unsolved",
+      disposition == "Open/No arrest"        ~ "unsolved",
+      disposition == "Closed by arrest"      ~ "solved",
+    )
+  ) %>% 
+  select(city_state, resolved) %>% 
+  filter(city_state != "Tulsa, AL")
+```
+
+Summarize the total number of unsolved cases in each of the cities.
+
+```{r}
+aggregate_df = 
+  homicide_df %>% 
+  group_by(city_state) %>% 
+  summarize(
+    hom_total = n(),
+    hom_unsolved = sum(resolved == "unsolved")
+  )
+```
+
+Do a prop test for Baltimore, MD.
+
+```{r}
+prop.test(
+  aggregate_df %>% filter(city_state == "Baltimore, MD") %>% pull(hom_unsolved), 
+  aggregate_df %>% filter(city_state == "Baltimore, MD") %>% pull(hom_total)) %>% 
+  broom::tidy()
+```
+
+
+
+
 
 
 <!------------------------------------------------------------------------------------------
