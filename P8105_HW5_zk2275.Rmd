@@ -73,7 +73,7 @@ homicide_df =
   # remove a row that seems to have an error
   filter(city_state != "Tulsa, AL")
   
-head(homicide_df, 10) %>% knitr::kable()
+head(homicide_df, 10) |> knitr::kable()
 ```
 
 Upon filtering out a single row with a data entry issue, the dataset consists of `r nrow(homicide_df)` observations and 14 variables, two of which - city_state and resolution - we added for convenience. Each row of the dataset corresponds to a homicide case reported between 2007 and 2017 and includes record of the victim’s name, race/ethnicity, age, and sex.
@@ -84,8 +84,8 @@ We aim to understand the distribution of resolution rates across cities. To that
 
 ```{r}
 aggregate_df = 
-  homicide_df %>% 
-  group_by(city_state) %>% 
+  homicide_df |> 
+  group_by(city_state) |> 
   summarize(
     hom_total = n(),
     hom_unsolved = sum(resolved == "unsolved")
@@ -97,11 +97,11 @@ Do a prop test for Baltimore, MD.
 ```{r}
 # Save the output
 Baltimore_prop <- prop.test(
-  aggregate_df %>% filter(city_state == "Baltimore, MD") %>% pull(hom_unsolved), 
-  aggregate_df %>% filter(city_state == "Baltimore, MD") %>% pull(hom_total)) 
+  aggregate_df |> filter(city_state == "Baltimore, MD") |> pull(hom_unsolved), 
+  aggregate_df |> filter(city_state == "Baltimore, MD") |> pull(hom_total)) 
 
 # pull out
-broom::tidy(Baltimore_prop) %>% 
+broom::tidy(Baltimore_prop) |> 
   # extract relevant output
   select(estimate, conf.low, conf.high)
 
@@ -115,7 +115,7 @@ results_df =
   mutate(
     prop_tests = map2(.x = hom_unsolved, .y = hom_total, ~prop.test(x = .x, n = .y)),
     tidy_tests = map(.x = prop_tests, ~broom::tidy(.x))
-  ) %>% 
+  ) |> 
   # extract both the proportion of unsolved homicides and the confidence interval for each
   select(-prop_tests) |> 
   unnest(tidy_tests) |> 
@@ -128,9 +128,9 @@ Using this data frame of results, we can now better visualize the distribution o
 
 ```{r homicide plot}
 # create error bar chart of rate of unsolved homicide by city
-results_df %>%
+results_df |>
   # reorder cities according to point estimate of proportion
-  mutate(city_state = fct_reorder(city_state, estimate)) %>%
+  mutate(city_state = fct_reorder(city_state, estimate)) |>
   # instantiate plot
   ggplot(aes(x = city_state, y = estimate)) +
   # add point estimates
@@ -160,117 +160,73 @@ Problem 2
 
 # Problem 2
 
+We next consider (ostensibly fictional) data from a longitudinal study that included a control arm and an experimental arm.
 
+# create tidy dataset for longitudinal study
+```{r}
+lda_df = 
+  tibble(
+    file = list.files("datasets/hw5_data/data"),
+  ) %>% 
+  mutate(
+    path = str_c("datasets/hw5_data/data/", file),
+    # read in data now
+    data = map(path, read_csv)
+    ) %>% 
+  unnest(data) %>% 
+  # extract the group and id
+  mutate(
+    label = str_extract(file, "(exp_[0-9][0-9]|con_[0-9][0-9])"),
+  ) %>% 
+  separate(
+    label,
+    into = c("arm","id"),
+    sep = "_"
+  ) %>% 
+  pivot_longer(
+    week_1:week_8,
+    names_to = "week",
+    values_to = "observations",
+    names_prefix = "week_"
+  ) %>% 
+  mutate(
+    arm = as.factor(arm),
+    id = as.numeric(id),
+    week = as.numeric(week),
+    observations = as.numeric(observations)
+  ) %>% 
+  select(-file,-path)
+
+lda_df %>%
+  head(10) %>% 
+  knitr::kable()
+```
+
+Each subject’s weekly values were originally stored as a row vector in an isolated CSV file. We have tidied the data by iterating over each file and building a singular dataset wherein each observation in the dataset is uniquely identified by the arm type (control or experimental), the subject ID, and the week. It is now a simple task to visualize the trend of values over time by arm type.
+
+# create a spaghetti chart of the data
+```{r}
+lda_df %>%
+  # instantiate plot
+  ggplot(aes(x = week, y = observations, group = id)) +
+  # add lines
+  geom_line() +
+  # create separate line charts for each arm
+  facet_grid(~arm) +
+  # add meta-data
+  labs(
+      title = "Value over Time, by Arm"
+    , x     = "Week"
+    , y     = "Value"
+  )
+```
+
+
+We see that values for the control arm group trended flat, if not slightly downward, over the course of the eight weeks of the trial. While values for the experimental arm group generally started in the same place as those of the control arm group, the average subject in the experimental arm group exhibited a linear increase of almost 4 units over the course of the trial. While not a formal statistical hypothesis test, this visualization gives us hope that the experimental drug was effective.
 
 <!------------------------------------------------------------------------------------------
 Problem 3
 ------------------------------------------------------------------------------------------->
 
 # Problem 3
-
-First, create the functions that generates the normally data and conducts t_test:
-
-```{r p3_function}
-sim_t_test = function(n = 30, mu = 0, sigma = 5){
-  sim_data = tibble(
-    x = rnorm(n, mean = mu, sd = sigma)
-  ) 
-    
-  tests_data = t.test(sim_data, mu = 0, conf.level = 0.95)
-  
-  sim_data %>% 
-    summarize(
-      mu_hat =pull(broom::tidy(tests_data),estimate),
-      p_val = pull(broom::tidy(tests_data),p.value)
-    )
-}
-
-```
-
-Generate and conduct t-test on each of the 5000 datasets:
-
-```{r iteration, cache=TRUE}
-results_df = 
-  tibble(
-    true_mean = c(0:6)
-  ) %>% 
-  mutate( # learnt from Ryan
-    outputs_lists = map(.x = true_mean, ~rerun(5000, sim_t_test(mu = .x))),
-    estimate_dfs = map(outputs_lists, bind_rows)
-  ) %>% 
-  select(-outputs_lists) %>% 
-  unnest(estimate_dfs)
-
-```
-
-Make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of mu on the x axis.
-
-```{r plot_prop}
-results_df %>% 
-  group_by(true_mean) %>% 
-  mutate(
-    true_mean = as.factor(true_mean),
-    total = n(),
-    rej_null = sum(p_val < 0.05),
-    rej_prop = rej_null/total
-  ) %>%
-  ggplot(aes(x = true_mean, y = rej_prop, color = true_mean, group = true_mean)) +
-  geom_point(alpha = .5) +
-  scale_y_continuous(n.breaks = 10) +
-  ggtitle("The Power of the Tests")+
-  ylab("Proportion of times the null was rejected ")+
-  xlab("True means under the null")
-
-```
-
-**Comments:**
-
-As the true mean increases and goes away from the 0, which is the mean of the population distribution of our sample, the power of the test, in other word, the proportion of times the null was rejected increased, and getting closer and closer to 1.
-
-
-Make a plot showing the average estimate of mu_hat on the y axis and the true value of mu on the x axis and the average estimate of mu_hat only in samples for which the null was rejected on the y axis and the true value of mu on the x axis. 
-
-```{r plot_mean}
-results_df %>% 
-  mutate(
-    true_mean = as.factor(true_mean),
-    mu_bar = (mean(mu_hat)),
-    rej = case_when(p_val < 0.05 ~ "reject", p_val>0.05 ~ "failed to reject" ),
-    rej = as.factor(rej)
-  ) %>% 
-  group_by(rej, true_mean) %>% 
-  mutate(
-    rej_mean = mean(mu_hat)
-  ) %>% 
-  ungroup() %>% 
-  group_by(true_mean) %>% 
-  mutate(
-    total_mean = mean(mu_hat)
-  ) %>% 
-  ungroup() %>% 
-  filter(rej == "reject") %>% 
-  pivot_longer(
-    rej_mean:total_mean,
-    names_to = "type",
-    values_to = "mean"
-  ) %>% 
-  mutate(type = as.factor(type)) %>% 
-  select(true_mean, type, mean) %>% 
-  group_by(true_mean, type) %>% 
-  # using a different shape of dots since there are some overlapping.
-  ggplot(aes(x = true_mean, y = mean , color = type, group = type, shape = type)) +
-  geom_point(alpha = .3) +
-  scale_y_continuous(n.breaks = 7) +
-  ggtitle("Average estimate of mean verses the True mean")+
-  ylab("Average of estimate of mean") +
-  xlab("True means under the null")
-
-```
-
-**Comments:**
-
-As the plot above shows, the sample average of mu_hat across tests for which the null is rejected is not approximate to the true value of mu when the mu equals to 1, 2 and 3. Since we rejected the null, our sample mean is far away from the mean under the null hypothesis when the sample mean is relatively low, and the average of mean of the rejected tests is far away from the null too.
-
-However, when mu equals to 4,5 and 6, the rejected estimates are approximately equal to the true value of mu since we almost reject all tests. There is a special case when mu equals to 0, the estimate and the true value of mu are close because negative rejected ones may offset the effect of positive rejected estimates.
-
 
