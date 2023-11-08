@@ -28,6 +28,7 @@ knitr::opts_chunk$set(
                message   = FALSE,
                warning   = FALSE,
                dpi       = 150,
+               fig.height= 8,
                fig.align = "center")
 # set theme defaults
 theme_set(
@@ -162,7 +163,7 @@ Problem 2
 
 We next consider (ostensibly fictional) data from a longitudinal study that included a control arm and an experimental arm.
 
-# create tidy dataset for longitudinal study
+#### create tidy dataset for longitudinal study
 ```{r}
 lda_df = 
   tibble(
@@ -204,8 +205,8 @@ lda_df %>%
 
 Each subject’s weekly values were originally stored as a row vector in an isolated CSV file. We have tidied the data by iterating over each file and building a singular dataset wherein each observation in the dataset is uniquely identified by the arm type (control or experimental), the subject ID, and the week. It is now a simple task to visualize the trend of values over time by arm type.
 
-# create a spaghetti chart of the data
-```{r}
+#### Create a spaghetti chart of the data
+```{r fig.height= 6}
 lda_df %>%
   # instantiate plot
   ggplot(aes(x = week, y = observations, group = id)) +
