@@ -122,7 +122,7 @@ results_df =
   unnest(tidy_tests) |> 
   select(city_state, estimate, conf.low, conf.high)
 
-results_df |> knitr::kable()
+results_df |>head(10)|> knitr::kable()
 ```
 
 Using this data frame of results, we can now better visualize the distribution of proportions, sorted according to the point estimate of the proportion of unsolved homicides.
@@ -206,7 +206,7 @@ lda_df %>%
 Each subject’s weekly values were originally stored as a row vector in an isolated CSV file. We have tidied the data by iterating over each file and building a singular dataset wherein each observation in the dataset is uniquely identified by the arm type (control or experimental), the subject ID, and the week. It is now a simple task to visualize the trend of values over time by arm type.
 
 #### Create a spaghetti chart of the data
-```{r fig.height= 6}
+```{r fig.height= 6,fig.height=7,fig.width=5}
 lda_df %>%
   # instantiate plot
   ggplot(aes(x = week, y = observations, group = id)) +
@@ -268,7 +268,7 @@ results_df =
 
 Make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of mu on the x axis.
 
-```{r plot_prop}
+```{r plot_prop,fig.height=7,fig.width=5}
 results_df |> 
   group_by(true_mean) |> 
   mutate(
@@ -293,7 +293,7 @@ As the true mean increases and goes away from the 0, which is the mean of the po
 
 Make a plot showing the average estimate of mu_hat on the y axis and the true value of mu on the x axis and the average estimate of mu_hat only in samples for which the null was rejected on the y axis and the true value of mu on the x axis. 
 
-```{r plot_mean}
+```{r plot_mean,fig.height=7,fig.width=5}
 results_df |> 
   mutate(
     true_mean = as.factor(true_mean),
